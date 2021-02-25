@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Deno",
+      "type": "pwa-node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "deno",
+      "runtimeArgs": ["test", "-c", "tsconfig.json", "--inspect-brk"],
+      "attachSimplePort": 9229
+    }
+  ]
+}

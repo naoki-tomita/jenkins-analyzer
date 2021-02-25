@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/c3/0.7.20/c3.css"/>
+</head>
+<body>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/5.16.0/d3.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/c3/0.7.20/c3.js"></script>
+  <select id="jobs"></select>
+  <div id="chart"></div>
+  <script>
+    const jobSelector = document.getElementById("jobs");
+    class Builds {
+      constructor(values) {
+        this.values = values;
+      }
+
+      extractSucceeded() {
+        return new Builds(this.values.filter(it => it.status === "SUCCESS"));
+      }
+
+      latestLimit(count) {
+        return new Builds(this.values.slice(-count));
+      }
+
+      validStageNames() {
+        return [...new Set(this.values.map(it => it.validStageNames()).flat())];
+      }
+
+      buildIds() {
+        return this.values.map(it => it.id);
+      }
+
+      stageDurationsBy(stageName) {
+        return this.values.map(it => it.stageDurationBy(stageName));
+      }
+    }
+
+    class Build {
+      constructor(id, status, duration, stages) {
+        this.id = id;
+        this.status = status;
+        this.duration = duration;
+        this.stages = stages;
+      }
+
+      validStageNames() {
+        return this.stages.excludeIgnoredStage().names();
+      }
+
+      stageDurationBy(stageName) {
+        return this.stages.find(stage => stage.name === stageName)?.durationMinutes() ?? null;
+      }
+    }
+
+    class Stages {
+      constructor(values) {
+        this.values = values;
+      }
+
+      names() {
+        return this.values.map(it => it.name);
+      }
+
+      excludeIgnoredStage() {
+        return new Stages(this.values.filter(it => !it.isIgnoredStage()));
+      }
+
+      find(pred) {
+        return this.values.find(pred);
+      }
+    }
+
+    class Stage {
+      constructor(name, status, duration) {
+        this.name = name;
+        this.status = status;
+        this.duration = duration;
+      }
+
+      isIgnoredStage() {
+        return (
+          this.name === "check deploy for production"
+        );
+      }
+
+      durationMinutes() {
+        // duration.toMinutes()
+        return this.duration / (1000 * 60);
+      }
+    }
+
+    class Columns {
+      constructor(values) {
+        this.values = values;
+      }
+
+      excludeIgnoredColumns() {
+        return new Columns(this.values.filter(it => !it.isIgnoredColumn()));
+      }
+
+      columnNames() {
+        return this.values.map(it => it.name);
+      }
+
+      toC3Columns() {
+        return this.values.map(it => [it.name, ...it.values]);
+      }
+
+      toC3Groups() {
+        return [this.columnNames()];
+      }
+
+      toC3Types(type) {
+        return this.columnNames().reduce((prev, curr) => ({ ...prev, [curr]: type }), {});
+      }
+    }
+
+    class Column {
+      constructor(name, values) {
+        this.name = name;
+        this.values = values;
+      }
+
+      isIgnoredColumn() {
+        console.log(this.name, Math.max(...this.values));
+        return Math.max(...this.values) <= 1;
+      }
+    }
+
+
+    jobSelector.addEventListener("change", async (e) => {
+      const { builds: rawBuilds } = await fetch(`/v1/jobs/${e.target.value}/builds`).then(it => it.json());
+      const builds = new Builds(
+        rawBuilds.map(b => new Build(
+          b.id,
+          b.status,
+          b.duration,
+          new Stages(b.stages.map(s => new Stage(s.name, s.status, s.duration)))
+        ))
+      );
+      const latestBuilds = builds.extractSucceeded().latestLimit(200);
+      const stageNames = latestBuilds.validStageNames();
+      const buildIds = latestBuilds.buildIds();
+
+      const columns = new Columns(
+        stageNames.map(name => new Column(name, latestBuilds.stageDurationsBy(name)))
+      );
+      const filteredColumns = columns.excludeIgnoredColumns();
+
+      console.log(filteredColumns.toC3Types("area"), filteredColumns.toC3Groups(), filteredColumns.toC3Columns());
+
+      const chart = c3.generate({
+        bindto: "#chart",
+        size: { height: 680 },
+        data: {
+          columns: filteredColumns.toC3Columns(),
+          groups: filteredColumns.toC3Groups(),
+          types: filteredColumns.toC3Types("area"),
+        },
+        axis: {
+          x: {
+            type: "category",
+            categories: buildIds,
+            tick: {
+              culling: {
+                max: 20,
+              },
+            },
+          },
+          y: { min: 0 }
+        },
+        subchart: {
+          show: true
+        }
+      });
+    });
+
+    async function init() {
+      const { jobs } = await fetch("/v1/jobs").then(it => it.json());
+      for (const job of jobs) {
+        const option = document.createElement("option");
+        option.textContent = job.name;
+        option.value = job.id;
+        jobSelector.append(option);
+      }
+      jobSelector.value = jobs[0].id;
+      jobSelector.dispatchEvent(new Event("change"));
+    }
+    init();
+  </script>
+</body>
+</html>
