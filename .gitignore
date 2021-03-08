@@ -1,2 +1,3 @@
 .env
 statics/jobs.json
+*.db

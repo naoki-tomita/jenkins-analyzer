@@ -1,0 +1,9 @@
+{
+    "imports": {
+        "aleph": "https://deno.land/x/aleph@v0.3.0-alpha.1/mod.ts",
+        "aleph/": "https://deno.land/x/aleph@v0.3.0-alpha.1/",
+        "react": "https://esm.sh/react@16.14.0",
+        "react-dom": "https://esm.sh/react-dom@16.14.0"
+    },
+    "scopes": {}
+}
